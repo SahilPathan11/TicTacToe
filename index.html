@@ -31,7 +31,7 @@
       text-shadow: 2px 2px 5px #000;
     }
 
-    select {
+    select, #difficulty {
       margin-top: 10px;
       padding: 6px 12px;
       font-size: 1rem;
@@ -136,11 +136,16 @@
   </style>
 </head>
 <body>
-  <h1>Smart Tic-Tac-Toe 🤖</h1>
+  <h1>Tic-Tac-Toe 🤖</h1>
 
   <select id="modeSelect">
     <option value="bot">Player vs AI</option>
     <option value="2p">2 Player Mode</option>
+  </select>
+
+  <select id="difficulty">
+    <option value="hard">Hard (Unbeatable)</option>
+    <option value="easy">Easy (Random)</option>
   </select>
 
   <div class="scoreboard">
@@ -152,31 +157,30 @@
   <div id="status"></div>
   <button id="restart">Restart Game</button>
 
-  <!-- Sound Effects -->
-  <audio id="moveSound" src="https://freesound.org/data/previews/64/64302_634166-lq.mp3"></audio>
-  <audio id="winSound" src="https://freesound.org/data/previews/320/320654_5260873-lq.mp3"></audio>
-  <audio id="drawSound" src="https://freesound.org/data/previews/178/178186_3248244-lq.mp3"></audio>
-
   <script>
     const board = document.getElementById('board');
     const statusText = document.getElementById('status');
     const restartBtn = document.getElementById('restart');
-    const moveSound = document.getElementById('moveSound');
-    const winSound = document.getElementById('winSound');
-    const drawSound = document.getElementById('drawSound');
     const xScoreEl = document.getElementById('xScore');
     const oScoreEl = document.getElementById('oScore');
     const modeSelect = document.getElementById('modeSelect');
+    const difficultySelect = document.getElementById('difficulty');
 
     let currentPlayer = 'X';
     let cells = Array(9).fill(null);
     let gameActive = true;
     let xScore = 0;
     let oScore = 0;
-    let gameMode = modeSelect.value; // "bot" or "2p"
+    let gameMode = modeSelect.value;
+    let difficulty = difficultySelect.value;
 
     modeSelect.addEventListener('change', () => {
       gameMode = modeSelect.value;
+      resetGame();
+    });
+
+    difficultySelect.addEventListener('change', () => {
+      difficulty = difficultySelect.value;
       resetGame();
     });
 
@@ -196,83 +200,102 @@
 
     function handleClick(index) {
       if (!gameActive || cells[index]) return;
-
       cells[index] = currentPlayer;
-      moveSound.play();
       const win = checkWinner();
       renderBoard();
 
-      if (win) {
-        endGame(`${currentPlayer} wins!`, win);
-        return;
-      }
-
-      if (cells.every(cell => cell)) {
-        drawSound.play();
-        endGame("It's a draw!");
-        return;
-      }
+      if (win) return endGame(`${currentPlayer} wins!`, win);
+      if (cells.every(cell => cell)) return endGame("It's a draw!");
 
       currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
       statusText.textContent = `Player ${currentPlayer}'s turn`;
 
       if (gameMode === 'bot' && currentPlayer === 'O') {
-        setTimeout(aiMove, 500);
+        setTimeout(aiMove, 300);
       }
     }
 
     function aiMove() {
-      if (!gameActive) return;
-
-      const emptyIndices = cells.map((val, i) => val === null ? i : null).filter(v => v !== null);
-      let move = null;
-
-      for (let i of emptyIndices) {
-        cells[i] = 'O';
-        if (checkWinner()) {
-          move = i;
-          break;
-        }
-        cells[i] = null;
-      }
-
-      if (move === null) {
-        for (let i of emptyIndices) {
-          cells[i] = 'X';
-          if (checkWinner()) {
-            move = i;
-            break;
+      let move;
+      if (difficulty === 'easy') {
+        const available = cells.map((v, i) => v === null ? i : null).filter(i => i !== null);
+        move = available[Math.floor(Math.random() * available.length)];
+      } else {
+        let bestScore = -Infinity;
+        for (let i = 0; i < cells.length; i++) {
+          if (cells[i] === null) {
+            cells[i] = 'O';
+            let score = minimax(cells, 0, false);
+            cells[i] = null;
+            if (score > bestScore) {
+              bestScore = score;
+              move = i;
+            }
           }
-          cells[i] = null;
         }
-      }
-
-      if (move === null) {
-        move = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
       }
 
       cells[move] = 'O';
-      moveSound.play();
       const win = checkWinner();
       renderBoard();
+      if (win) return endGame("AI wins!", win);
+      if (cells.every(cell => cell)) return endGame("It's a draw!");
+      currentPlayer = 'X';
+      statusText.textContent = "Player X's turn";
+    }
 
-      if (win) {
-        endGame("AI wins!", win);
-      } else if (cells.every(cell => cell)) {
-        endGame("It's a draw!");
+    function minimax(board, depth, isMaximizing) {
+      const winner = checkWinnerMinimax(board);
+      if (winner === 'O') return 10 - depth;
+      if (winner === 'X') return depth - 10;
+      if (board.every(cell => cell !== null)) return 0;
+
+      if (isMaximizing) {
+        let best = -Infinity;
+        for (let i = 0; i < board.length; i++) {
+          if (board[i] === null) {
+            board[i] = 'O';
+            let score = minimax(board, depth + 1, false);
+            board[i] = null;
+            best = Math.max(score, best);
+          }
+        }
+        return best;
       } else {
-        currentPlayer = 'X';
-        statusText.textContent = "Player X's turn";
+        let best = Infinity;
+        for (let i = 0; i < board.length; i++) {
+          if (board[i] === null) {
+            board[i] = 'X';
+            let score = minimax(board, depth + 1, true);
+            board[i] = null;
+            best = Math.min(score, best);
+          }
+        }
+        return best;
       }
     }
 
-    function checkWinner() {
-      const patterns = [
+    function checkWinnerMinimax(b) {
+      const wins = [
         [0,1,2], [3,4,5], [6,7,8],
         [0,3,6], [1,4,7], [2,5,8],
         [0,4,8], [2,4,6]
       ];
-      for (let [a, b, c] of patterns) {
+      for (let [a, b2, c] of wins) {
+        if (b[a] && b[a] === b[b2] && b[a] === b[c]) {
+          return b[a];
+        }
+      }
+      return null;
+    }
+
+    function checkWinner() {
+      const wins = [
+        [0,1,2], [3,4,5], [6,7,8],
+        [0,3,6], [1,4,7], [2,5,8],
+        [0,4,8], [2,4,6]
+      ];
+      for (let [a, b, c] of wins) {
         if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) {
           return [a, b, c];
         }
@@ -284,11 +307,8 @@
       statusText.textContent = message;
       gameActive = false;
       if (pattern) {
-        winSound.play();
         highlightWinningCells(pattern);
         updateScore(currentPlayer);
-      } else {
-        drawSound.play();
       }
     }
 
@@ -316,8 +336,6 @@
     }
 
     restartBtn.addEventListener('click', resetGame);
-
-    // Initial setup
     resetGame();
   </script>
 </body>
